@@ -1,0 +1,32 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/yexinyi/Desktop/EECS591/p2/code/definition.cpp
+definition.h
+/Users/yexinyi/Desktop/EECS591/p2/code/definition.h
+
+/Users/yexinyi/Desktop/EECS591/p2/code/definition.h
+utility
+-
+iostream
+-
+vector
+-
+
+/Users/yexinyi/Desktop/EECS591/p2/code/main.cpp
+definition.h
+/Users/yexinyi/Desktop/EECS591/p2/code/definition.h
+ctime
+-
+cmath
+-
+vector
+-
+cstdlib
+-
+
