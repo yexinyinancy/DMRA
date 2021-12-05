@@ -13,7 +13,7 @@ class unit{
 public:
     pair<int,int> location; //表示该单元在grid上的位置
     int com;    //表示该单元所属的sp单位
-	bool set;	//indicate the unit is setted on the grid;
+	bool set;	//indicate the unit is set on the grid;
 	bool isBs;
 };
 class service{
