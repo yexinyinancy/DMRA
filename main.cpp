@@ -4,13 +4,7 @@
 #include <vector>
 #include <cstdlib>
 
-const int CON_B_PRICE = 2;    //the const b in the price equation
-const double DIFF_PRICE = 1.5;    //the const theta in the price equation
-const int ROW = 5;    //the const row in the price of v_ui
-const int BANDUP = 3;
-const double COVERDIS = 100;
-using namespace std;
-const double capacity = 500; //for bag problem
+
 
 double dist(const unit unit_1, const unit unit_2) {
     return sqrt(pow((unit_1.location.first - unit_2.location.first), 2) +
@@ -31,7 +25,7 @@ double v_value(const ue &UE, const bs &BS) {    //calculate the v_value of the b
     }
     double remBan = BS.remBan;
     //cout<<BS.bsCom<<" "<<resRem<<" "<<remBan<<" "<<dist(UE,BS)<<endl;
-    return price(UE, BS) + ROW / (resRem + remBan);
+    return price(UE, BS) + RHO / (resRem + remBan);
 }
 
 void printGrid(unit **grid) {    //use to check the map of the city, just for fun
@@ -170,9 +164,9 @@ init(unit **grid, ue *ueList, bs *bsList) {    //initialize the grid and ue bs l
 //need a price decision scheme to decide the profit
 //for the service request of a single ue, if we can only do part of the service
 /*bsReq(ue* ueList, bs* bsList){
-	for(int i=0;i<BSNUM;++i){
-		int pro[]		
-	}
+    for(int i=0;i<BSNUM;++i){
+        int pro[]        
+    }
 }*/
 
 double cost_return(const ue &UE, const bs &BS) {    //calculate the v_value of the bs to ue

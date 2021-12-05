@@ -29,7 +29,7 @@ double v_value(const ue &UE, const bs &BS) {    //calculate the v_value of the b
     }
     double remBan = BS.remBan;
     //cout<<BS.bsCom<<" "<<resRem<<" "<<remBan<<" "<<dist(UE,BS)<<endl;
-    return price(UE, BS) + ROW / (resRem + remBan);
+    return price(UE, BS) + RHO / (resRem + remBan);
 }
 
 void printGrid(unit **grid) {    //use to check the map of the city, just for fun
@@ -163,9 +163,9 @@ init(unit **grid, ue *ueList, bs *bsList) {    //initialize the grid and ue bs l
 //need a price decision scheme to decide the profit
 //for the service request of a single ue, if we can only do part of the service
 /*bsReq(ue* ueList, bs* bsList){
-	for(int i=0;i<BSNUM;++i){
-		int pro[]
-	}
+    for(int i=0;i<BSNUM;++i){
+        int pro[]
+    }
 }*/
 
 double cost_return(const ue &UE, const bs &BS) {    //calculate the v_value of the bs to ue
