@@ -9,50 +9,26 @@
 
 using namespace std;
 
-// forward declaration
+// forward declarations
 class unit;
 class bs;
 class ue;
 class ServiceProvider;
 
-const int WIDTH = 100;
-const int LENGTH = 100;
-const int TASK = 1;
-const int UENUM = 20;
-const int BSNUM = 10;
-
-// the constant b in the price equation
-const int CON_B_PRICE = 1;
-// the constant theta in the price equation
-const double DIFF_PRICE = 1.5;
-// the constant IOTA in the price equation
-const double IOTA_PRICE = 1.5;
-// cost for SP to pay for BS computation
-const double SERVICE_PRICE = 1.0;
-// cost for SP to pay for cloud computation
-const double REMOTE_CLOUD_PRICE = 5.0;
-// constant mko
-const double MKO = 0.5;
-// constant mk, price for UE to pay for SP's service
-const double MK = 2.0;
-
-// the constant rho in the price of v_ui
-const int RHO = 5;
-const int BANDUP = 3;
-const double COVERDIS = 100;
-// for knapsack problem
-const double capacity = 500;
-
+// (weighted) distance between two units
 double weightedDistance(const unit& u1, const unit& u2, double sigma = 1);
-
-double ue2bsPreference(const ue& UE, const bs& BS);
-
+// between two units
+double distance(const unit& u1, const unit& u2);
 
 class ServiceProvider {
 public:
     int spID;
     // service prices for UEs to use
     vector<double> prices;
+    // all BSs
+    const vector<bs*> BSs;
+    // profit after allocation
+    double profit;
 public:
 
 };
@@ -91,9 +67,8 @@ public:
     bs* mybs;
 
 public:
-    service(int res = 0, int resRem = 0, double price = 1);
     // get the unit price of this service on a bs requested by an sp
-    double getPrice(const ue& u);
+    double getPrice(const ue& u) const;
 };
 
 class request {
@@ -115,41 +90,57 @@ public:
     // if the task of ue has been all clear;
     bool clear = false;
     int index;
-    // int ueCom;    
-    // bool set = true;
-    // bool isBs = false;
-    double band;
-    // service* reqService;
-    // BSs that cover this ue
-    vector<bs*> coverBSs;
 
+    double band;
+    // BSs thats cover this ue and provides the service requested
+    unordered_set<bs*> coverBSs;
     // services requested by this ue
     request req;
     // the bs that finally handles req
     bs* targetBs;
-    ue(ServiceProvider* sp, int band = 10, int row = 0, int col = 0);
+public:
+    // ue to bs preference, lower is more prefered
+    double bsPreference(const bs& BS);
+    bs* findBestBS();
 };
 
 class bs : public unit {
 public:
     int ServiceNum;
-    // int bsCom;    //the company of this bs
-    // bool set = true;
-    // bool isBs = true;
     double totalBan;
     double remBan;
-    // service* totalService;
     // services provided by this bs
     unordered_map<int, service> services;
     int reqUe;
     // ue* ueList;
     vector<ue*> ueList;
     // the list of the tmp U for the bs in the original method
-    vector<ue> tmpList;    
-    // bool* serUe = new bool[UENUM];    //if the bs has served the specific ue
+    vector<ue> tmpList;
+    // bool* serUe = new bool[UENUM];
+    // if the bs has served the specific ue
     unordered_set<ue*> servedUEs;
-    bs(ServiceProvider* sp, int totalBan = 100, int row = 0, int col = 0);
+public:
+    // bs to ue preference, lower is more prefered
+    // TODO: modify this
+    double uePreference(const ue& UE);
     //void operator = (const bs &BS);
+    bool provideService(int service_type) const {
+        auto it = services.find(service_type);
+        return it != services.end();
+    }
+};
+
+class World {
+public:
+    vector<bs> BSs;
+    vector<ue> UEs;
+    vector<ServiceProvider> SPs;
+    // result of the match problem
+    // each ue has one request assigned to a bs; if no bs, assigned to the remote cloud
+    unordered_map<ue*, bs*> result;
+public:
+    World();
+    void maxProfit();
 };
 
 #endif
