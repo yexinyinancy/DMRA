@@ -9,77 +9,62 @@ const int TASK = 1;
 const int UENUM = 20;
 const int BSNUM = 10;
 
+const double COVERDIS = 300;
+
 // 10 types of services are provided
 const int NUM_SERVICE_TYPES = 10;
 
 // the constant b in the price equation
 const int CON_B_PRICE = 1;
-// the constant theta in the price equation
-const double DIFF_PRICE = 1.5;
+// the constant SIGMA in the price equation
+const double SIGMA_PRICE = COVERDIS;
 // the constant IOTA in the price equation
-const double IOTA_PRICE = 1.5;
+const double IOTA_PRICE = 2.0;
 // cost for SP to pay for BS computation
 const double SERVICE_PRICE = 1.0;
 // cost for SP to pay for cloud computation
-const double REMOTE_CLOUD_PRICE = 5.0;
+const double REMOTE_CLOUD_PRICE = 15.0;
 // constant mko
-const double MKO = 0.5;
+const double MKO = 5.0;
 // constant mk, price for UE to pay for SP's service
 const double MK = 2.0;
 
 // the constant rho in the price of v_ui
 const int RHO = 5;
 const int BANDUP = 3;
-const double COVERDIS = 100;
+
 // for knapsack problem
 const double capacity = 500;
 
 
 /*********************  service methods  *************************/
 
-// service::service(int res, int resRem, double price) {
-//     this->res = res;
-//     this->resRem = resRem;
-//     this->price = price;
-// }
-
-
 double service::getPrice(const ue& u) const {
     double iota = 1.0;
-    if (u.mysp != this->mybs->mysp) {
+    if (this->mybs->mysp && u.mysp != this->mybs->mysp) {
         iota = IOTA_PRICE;
     }
-    double p = this->price * (iota + weightedDistance(u, *mybs));
+    double p = 0.0;
+    if (this->mybs->mysp) {
+        p = this->price * (iota + weightedDistance(u, *mybs, SIGMA_PRICE));
+    } else {
+        p = this->price * iota;
+    }
     return p;
 }
 
-/*void bs::operator = (const bs &BS){
-    this->bsCom = BS.bsCom;
-    this->totalBan = BS.totalBan;
-    this->remBan = BS.remBan;
-    this->totalService = BS.totalService;
-    this->reqUe = BS.reqUe;
-    this->ueList = BS.ueList;
-    this->serUe = BS.serUe;
-}
-*/
-
 /*********************  ue methods  *************************/
 
-// ue::ue(ServiceProvider* sp, int band, int row, int col) {
-//     this->mysp = sp;
-//     this->band = band;
-//     set = true;
-//     location = make_pair(row,col);
-// }
-
-double ue::bsPreference(const bs& BS) {
+double ue::bsPreference(const bs& BS) const {
     auto service_it = BS.services.find(this->req.serviceType);
     if (service_it == BS.services.end()) {
         return 999999999.0;
     }
     const service& s = service_it->second;
     double p = s.getPrice(*this) + RHO / (s.resRem + BS.remBan);
+    // double p = s.getPrice(*this) - (s.resRem + BS.remBan);
+    // double p = -(this->mysp->prices[this->req.serviceType] - s.getPrice(*this)) * this->req.resourceRequested + RHO / (s.resRem + BS.remBan);
+
     return p;
 }
 
@@ -96,6 +81,14 @@ bs* ue::findBestBS() {
     return target;
 }
 
+double ue::serviceLatency(const service& s) const {
+    // cout << s.serviceType << " " << this->req.serviceType << endl;
+    assert(s.serviceType == this->req.serviceType);
+    double distance_delay = 2.0 * distance(*(s.mybs), *this) / 1000.0;
+    double computation_delay = this->req.workload * 1.0 / (this->req.resourceRequested * s.computationPower);
+    return distance_delay + computation_delay;
+}
+
 /*********************  bs methods  *************************/
 
 // bs::bs(ServiceProvider* sp, int totalBan, int row, int col) {
@@ -106,7 +99,9 @@ bs* ue::findBestBS() {
 // }
 
 double bs::uePreference(const ue& UE) {
-    return UE.req.radioNeeded + UE.req.resourceRequested;
+    double p = 10 * UE.serviceLatency(this->services[UE.req.serviceType]) -(UE.mysp->prices[UE.req.serviceType] - this->services[UE.req.serviceType].getPrice(UE)) * UE.req.resourceRequested + UE.req.radioNeeded + UE.req.resourceRequested;
+    return p;
+    // return UE.serviceLatency(this->services[UE.req.serviceType]) + UE.req.radioNeeded + UE.req.resourceRequested;
 }
 
 /*********************  World methods  *************************/
@@ -114,6 +109,20 @@ double bs::uePreference(const ue& UE) {
 World::World() {
     int service_num;
     cin >> service_num;
+
+    // init remote_cloud
+    this->remote_cloud.mysp = nullptr;
+    for (int i = 0; i < service_num; i++) {
+        service s;
+        s.mybs = &(this->remote_cloud);
+        s.computationPower = 10;
+        s.price = REMOTE_CLOUD_PRICE;
+        s.serviceType = i;
+        this->remote_cloud.services[i] = s;
+        assert(i == this->remote_cloud.services[i].serviceType);
+    }
+    this->remote_cloud.location.first = 5000;
+    this->remote_cloud.location.second = 5000;
 
     // init SPs
     int sp_num;
@@ -143,6 +152,7 @@ World::World() {
             cin >> service_type >> s.res >> s.price >> s.computationPower;
             s.resRem = s.res;
             s.mybs = &BS;
+            s.serviceType = service_type;
             BS.services[service_type] = s;
         }
     }
@@ -167,16 +177,11 @@ World::World() {
 }
 
 void World::maxProfit() {
-    this->result.clear();
-    for (ue& UE : this->UEs) {
-        this->result[&UE] = nullptr;
-    }
-    bool req_sent = false;
-
+    bool req_sent;
     do {
         req_sent = false;
         for (ue& UE : this->UEs) {
-            while (!UE.coverBSs.empty() && result[&UE] == nullptr) {
+            while (!UE.coverBSs.empty() && UE.targetBs == nullptr) {
                 bs* target_bs = UE.findBestBS();
                 assert(target_bs != nullptr);
                 if (
@@ -185,6 +190,7 @@ void World::maxProfit() {
                 ) {
                     // send service request to target bs
                     target_bs->services[UE.req.serviceType].candidates.push_back(&UE);
+                    assert(target_bs->services[UE.req.serviceType].serviceType == UE.req.serviceType);
                     req_sent = true;
                     break;
                 } else {
@@ -242,26 +248,60 @@ void World::maxProfit() {
             for (ue* tUE : target_UEs) {
                 assert(BS.services[tUE->req.serviceType].resRem >= tUE->req.resourceRequested);
                 BS.services[tUE->req.serviceType].resRem -= tUE->req.resourceRequested;
-                this->result[tUE] = &BS;
+                tUE->targetBs = &BS;
+                tUE->targetService = &(BS.services[tUE->req.serviceType]);
+                // cout << tUE->targetService->serviceType << " " << tUE->req.serviceType << endl;
+                assert(tUE->targetService->serviceType == tUE->req.serviceType);
             }
             target_UEs.clear();
         }
 
     } while (req_sent);
 
+
     // calculate SP profits
+    int num_cloud = 0;
     for (ue& UE : this->UEs) {
-        UE.mysp->profit += UE.mysp->prices[UE.req.serviceType];
-        double bs_cost = REMOTE_CLOUD_PRICE;
-        if (this->result[&UE] != nullptr) {
-            bs_cost =
-                this->result[&UE]->services[UE.req.serviceType].getPrice(UE) *
-                UE.req.resourceRequested;
+        if (UE.targetBs == nullptr) {
+            UE.targetBs = &(this->remote_cloud);
+            UE.targetService = &(this->remote_cloud.services[UE.req.serviceType]);
+            num_cloud++;
         }
-        UE.mysp->profit -= bs_cost;
+        double ue_profit = 0.0;
+        ue_profit += UE.mysp->prices[UE.req.serviceType] * UE.req.resourceRequested;
+        double compution_price = UE.targetBs->services[UE.req.serviceType].getPrice(UE);
+        double bs_cost = compution_price * UE.req.resourceRequested;
         double other_cost = UE.req.resourceRequested * MKO;
-        UE.mysp->profit -= other_cost;
+        ue_profit -= (bs_cost + other_cost);
+        // if (ue_profit < 0) {
+        //     cout << UE.targetBs << " " << &this->remote_cloud << endl;
+        // }
+        if (UE.targetBs == &(this->remote_cloud) && ue_profit > 0.1) {
+            cout << ue_profit << endl;
+        }
+        UE.mysp->profit += ue_profit;
     }
+    cout << num_cloud << " out of " << this->UEs.size() << " are assigned to remote cloud\n";
+}
+
+void World::printSPProfit() {
+    double tp = 0.0;
+    for (ServiceProvider& sp : this->SPs) {
+        // cout << "SP-" << sp.spID << " profit = " << sp.profit << endl;
+        tp += sp.profit;
+    }
+    cout << "Total Profit = " << tp << endl;
+}
+
+void World::printTotalLatency() {
+    double latency = 0.0;
+    for (int i = 0; i < this->UEs.size(); i++) {
+        ue& UE = this->UEs[i];
+        double ll = UE.serviceLatency(*(UE.targetService));
+        // cout << "UE-" << i << " latency = " << ll << endl;
+        latency += ll;
+    }
+    cout << "Total Latency = " << latency << endl;
 }
 
 /*********************  other functions  *************************/
@@ -270,7 +310,7 @@ double weightedDistance(const unit& u1, const unit& u2, double sigma) {
     return sqrt(
         pow(u1.location.first - u2.location.first, 2) +
         pow(u1.location.second - u2.location.second, 2)
-    );
+    ) / sigma;
 }
 
 double distance(const unit& u1, const unit& u2) {

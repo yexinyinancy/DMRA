@@ -36,7 +36,7 @@ public:
 class unit {
 public:
     // position of this unit on the grid
-    pair<int,int> location;
+    pair<int, int> location;
     // SP of this unit
     ServiceProvider* mysp;
 
@@ -49,7 +49,7 @@ public:
 
 class service {
 public:
-    int serviceID;
+    int serviceType;
     // For bs, it is the total number of the resource
     int res;
     // For bs, it is the remaining number of the resource
@@ -98,27 +98,24 @@ public:
     request req;
     // the bs that finally handles req
     bs* targetBs;
+    // the service that finally handles req
+    service* targetService;
 public:
     // ue to bs preference, lower is more prefered
-    double bsPreference(const bs& BS);
+    double bsPreference(const bs& BS) const;
+    // estimate latency
+    double serviceLatency(const service& s) const;
     bs* findBestBS();
 };
 
 class bs : public unit {
 public:
-    int ServiceNum;
+    // total radio resource
     double totalBan;
+    // remained radio resource
     double remBan;
     // services provided by this bs
     unordered_map<int, service> services;
-    int reqUe;
-    // ue* ueList;
-    vector<ue*> ueList;
-    // the list of the tmp U for the bs in the original method
-    vector<ue> tmpList;
-    // bool* serUe = new bool[UENUM];
-    // if the bs has served the specific ue
-    unordered_set<ue*> servedUEs;
 public:
     // bs to ue preference, lower is more prefered
     // TODO: modify this
@@ -132,15 +129,19 @@ public:
 
 class World {
 public:
+    // a virtual remote_cloud
+    bs remote_cloud;
     vector<bs> BSs;
     vector<ue> UEs;
     vector<ServiceProvider> SPs;
     // result of the match problem
     // each ue has one request assigned to a bs; if no bs, assigned to the remote cloud
-    unordered_map<ue*, bs*> result;
+    // unordered_map<ue*, bs*> result;
 public:
     World();
     void maxProfit();
+    void printSPProfit();
+    void printTotalLatency();
 };
 
 #endif
