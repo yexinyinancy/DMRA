@@ -105,6 +105,8 @@ public:
     double bsPreference(const bs& BS) const;
     // estimate latency
     double serviceLatency(const service& s) const;
+    double serviceProfit(const service& s) const;
+    double serviceProfit(const bs& BS) const;
     bs* findBestBS();
 };
 
@@ -124,6 +126,12 @@ public:
     bool provideService(int service_type) const {
         auto it = services.find(service_type);
         return it != services.end();
+    }
+    vector<ue*> knapsack(const vector<ue*> &target_UEs);
+    const service& getService(int service_type) const {
+        assert(provideService(service_type));
+        auto it = services.find(service_type);
+        return it->second;
     }
 };
 

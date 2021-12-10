@@ -55,19 +55,6 @@ double service::getPrice(const ue& u) const {
 
 /*********************  ue methods  *************************/
 
-double ue::bsPreference(const bs& BS) const {
-    auto service_it = BS.services.find(this->req.serviceType);
-    if (service_it == BS.services.end()) {
-        return 999999999.0;
-    }
-    const service& s = service_it->second;
-    double p = s.getPrice(*this) + RHO / (s.resRem + BS.remBan);
-    // double p = s.getPrice(*this) - (s.resRem + BS.remBan);
-    // double p = -(this->mysp->prices[this->req.serviceType] - s.getPrice(*this)) * this->req.resourceRequested + RHO / (s.resRem + BS.remBan);
-
-    return p;
-}
-
 bs* ue::findBestBS() {
     bs* target = nullptr;
     double min_pref = 999999999.0;
@@ -89,19 +76,71 @@ double ue::serviceLatency(const service& s) const {
     return distance_delay + computation_delay;
 }
 
+double ue::serviceProfit(const service& s) const {
+    double sale_price = mysp->prices[req.serviceType];
+    double compution_price = s.getPrice(*this);
+    double other_price = MKO;
+    double ue_profit = (sale_price - compution_price - other_price) * req.resourceRequested;
+    return max(ue_profit, 0.01);
+}
+
+double ue::serviceProfit(const bs& BS) const {
+    return this->serviceProfit(BS.getService(this->req.serviceType));
+}
+
+double ue::bsPreference(const bs& BS) const {
+    auto service_it = BS.services.find(this->req.serviceType);
+    if (service_it == BS.services.end()) {
+        return 999999999.0;
+    }
+    const service& s = service_it->second;
+    // double p = s.getPrice(*this) + RHO / (s.resRem + BS.remBan);
+    // double p = -(this->mysp->prices[this->req.serviceType] - s.getPrice(*this)) * this->req.resourceRequested + RHO / (s.resRem + BS.remBan);
+    // double p = -(this->serviceProfit(BS)) + RHO / (s.resRem + BS.remBan);
+    double p = 0.0001 * this->serviceLatency(BS.getService(this->req.serviceType)) + RHO / (s.resRem + BS.remBan);
+    return p;
+}
+
 /*********************  bs methods  *************************/
 
-// bs::bs(ServiceProvider* sp, int totalBan, int row, int col) {
-//     this->mysp = sp;
-//     this->totalBan = totalBan;
-//     this->remBan = totalBan;
-//     this->location = make_pair(row, col);
-// }
-
 double bs::uePreference(const ue& UE) {
-    double p = 10 * UE.serviceLatency(this->services[UE.req.serviceType]) -(UE.mysp->prices[UE.req.serviceType] - this->services[UE.req.serviceType].getPrice(UE)) * UE.req.resourceRequested + UE.req.radioNeeded + UE.req.resourceRequested;
-    return p;
+    // double p = 10 * UE.serviceLatency(this->services[UE.req.serviceType]) -(UE.mysp->prices[UE.req.serviceType] - this->services[UE.req.serviceType].getPrice(UE)) * UE.req.resourceRequested + UE.req.radioNeeded + UE.req.resourceRequested;
+    // return p;
     // return UE.serviceLatency(this->services[UE.req.serviceType]) + UE.req.radioNeeded + UE.req.resourceRequested;
+
+    // return -1.5 * UE.serviceProfit(*this) + (UE.req.radioNeeded + UE.req.resourceRequested);
+    return UE.req.radioNeeded + UE.req.resourceRequested;
+}
+
+vector<ue*> bs::knapsack(const vector<ue*> &target_UEs) {
+    int n = target_UEs.size();
+    int cap = this->remBan;
+    vector<vector<double>> dp(n + 1, vector<double>(cap + 1, 0));
+    for (int i = 1; i <= n; i++) {
+        ue* UE = target_UEs[i - 1];
+        int radio = UE->req.radioNeeded;
+        double profit = UE->serviceProfit(*this);
+        for (int j = 0; j <= cap; j++) {
+            if (radio > j) {
+                dp[i][j] = dp[i - 1][j];
+            } else {
+                dp[i][j] = max(dp[i - 1][j], dp[i - 1][j - radio] + profit);
+            }
+            dp[i][j] = max(dp[i][j], dp[i][max(0, j - 1)]);
+        }
+    }
+    int c = cap;
+    vector<ue*> final_target;
+    for (int i = n; i >= 1; i--) {
+        ue* UE = target_UEs[i - 1];
+        if (dp[i][c] == dp[i - 1][c]) {
+        } else {
+            final_target.push_back(UE);
+            c -= UE->req.radioNeeded;
+        }
+    }
+    assert(final_target.size() > 0);
+    return final_target;
 }
 
 /*********************  World methods  *************************/
@@ -240,8 +279,21 @@ void World::maxProfit() {
                 w += tUE->req.radioNeeded;
             }
             if (w > BS.remBan) {
-                cerr << "Shouldn't be here" << endl;
-                assert(false);
+                sort(target_UEs.begin(), target_UEs.end(), [&BS](ue* u1, ue* u2) -> bool {
+                    return BS.uePreference(*u1) < BS.uePreference(*u2);
+                });
+                while (w > BS.remBan) {
+                    w -= target_UEs.back()->req.radioNeeded;
+                    target_UEs.pop_back();
+                }
+
+                // target_UEs = BS.knapsack(target_UEs);
+                // w = 0.0;
+                // for (ue* tUE : target_UEs) {
+                //     w += tUE->req.radioNeeded;
+                // }
+
+                // cout << w << " " << BS.remBan << endl;
             }
             assert(w <= BS.remBan);
             BS.remBan -= w;
@@ -267,22 +319,17 @@ void World::maxProfit() {
             UE.targetService = &(this->remote_cloud.services[UE.req.serviceType]);
             num_cloud++;
         }
-        double ue_profit = 0.0;
-        ue_profit += UE.mysp->prices[UE.req.serviceType] * UE.req.resourceRequested;
-        double compution_price = UE.targetBs->services[UE.req.serviceType].getPrice(UE);
-        double bs_cost = compution_price * UE.req.resourceRequested;
-        double other_cost = UE.req.resourceRequested * MKO;
-        ue_profit -= (bs_cost + other_cost);
-        // if (ue_profit < 0) {
-        //     cout << UE.targetBs << " " << &this->remote_cloud << endl;
+        double ue_profit = UE.serviceProfit(*(UE.targetService));
+        // if (UE.targetBs == &(this->remote_cloud)) {
+        //     // Assumption: cloud usage makes no 
+        //     ue_profit = 0.0;
         // }
-        if (UE.targetBs == &(this->remote_cloud) && ue_profit > 0.1) {
-            cout << ue_profit << endl;
-        }
         UE.mysp->profit += ue_profit;
     }
     cout << num_cloud << " out of " << this->UEs.size() << " are assigned to remote cloud\n";
 }
+
+
 
 void World::printSPProfit() {
     double tp = 0.0;
